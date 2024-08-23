@@ -29,13 +29,14 @@ def get_dust_forecast(search_date):
         'returnType': 'xml',
         'numOfRows': '100',
         'pageNo': '1',
-        'searchDate': search_date,
-        'InformCode': 'PM10'
+        'searchDate': search_date.strftime('%Y-%m-%d'),
+        'InformCode': 'PM10',
+        'ver': '1.1'
     }
 
     try:
         response = requests.get(url, params=params)
-        response.raise_for_status()
+        response.raise_for_status()  # Raises a HTTPError if the status is 4xx, 5xx
         
         # 응답 내용 로깅
         logging.debug(f"Raw API Response: {response.content}")
@@ -52,8 +53,6 @@ def get_dust_forecast(search_date):
 
         result_code = header.get('resultCode')
         result_msg = header.get('resultMsg')
-
-        logging.debug(f"Result Code: {result_code}, Result Message: {result_msg}")
 
         if result_code != '00':
             st.error(f"API 오류 (코드: {result_code}): {result_msg}")
@@ -111,7 +110,7 @@ if st.button('미세먼지 정보 확인 및 옷차림 추천받기'):
     if not claude_api_key:
         st.error('Claude API 키를 입력해주세요.')
     else:
-        dust_info = get_dust_forecast(search_date.strftime('%Y-%m-%d'))
+        dust_info = get_dust_forecast(search_date)
         
         if dust_info:
             st.subheader('미세먼지 예보')
@@ -147,3 +146,6 @@ st.sidebar.write('선글라스')
 # 푸터
 st.sidebar.markdown('---')
 st.sidebar.write('© 2023 에코패션 스타일리스트')
+
+# 데이터 출처 표시
+st.markdown("데이터 출처: 환경부/한국환경공단")
