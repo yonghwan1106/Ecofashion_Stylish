@@ -3,6 +3,11 @@ import requests
 import xmltodict
 from datetime import datetime
 import anthropic
+import logging
+import json
+
+# 로깅 설정
+logging.basicConfig(level=logging.DEBUG)
 
 # 제목 및 설명
 st.title('에코패션 스타일리스트')
@@ -28,23 +33,46 @@ def get_dust_forecast(search_date):
         'InformCode': 'PM10'
     }
 
-    response = requests.get(url, params=params)
-    dict_data = xmltodict.parse(response.content)
-    
-    # API 응답 구조 확인 및 안전한 데이터 접근
-    if 'response' in dict_data:
-        response_data = dict_data['response']
-        if 'body' in response_data:
-            body_data = response_data['body']
-            if 'items' in body_data:
-                items_data = body_data['items']
-                if 'item' in items_data:
-                    items = items_data['item']
-                    return items[0] if isinstance(items, list) else items
-    
-    # 데이터를 찾지 못한 경우
-    st.error("미세먼지 데이터를 가져오는데 실패했습니다. API 응답 구조를 확인해주세요.")
-    return None
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()  # Raises a HTTPError if the status is 4xx, 5xx
+        
+        # 응답 내용 로깅
+        logging.debug(f"Raw API Response: {response.content}")
+        
+        dict_data = xmltodict.parse(response.content)
+        
+        # 파싱된 데이터 로깅
+        logging.debug(f"Parsed API Response: {json.dumps(dict_data, indent=2)}")
+
+        # API 응답 구조 확인 및 안전한 데이터 접근
+        response_data = dict_data.get('response', {})
+        header = response_data.get('header', {})
+        body = response_data.get('body', {})
+
+        result_code = header.get('resultCode')
+        result_msg = header.get('resultMsg')
+
+        if result_code != '00':
+            st.error(f"API 오류: {result_msg}")
+            return None
+
+        items = body.get('items', {}).get('item', [])
+        if isinstance(items, dict):
+            items = [items]
+        
+        if not items:
+            st.warning("해당 날짜의 미세먼지 정보가 없습니다.")
+            return None
+        
+        return items
+    except requests.RequestException as e:
+        st.error(f"API 요청 중 오류가 발생했습니다: {e}")
+        return None
+    except Exception as e:
+        st.error(f"예상치 못한 오류가 발생했습니다: {e}")
+        logging.exception("Unexpected error occurred")
+        return None
 
 def get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidity):
     client = anthropic.Client(api_key=claude_api_key)
@@ -64,16 +92,18 @@ def get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidit
 
     추천 이유도 간단히 설명해주세요."""
 
-    response = client.completion(
-        model="claude-2.0",
-        prompt=prompt,
-        max_tokens_to_sample=300,
-        temperature=0.7
-    )
-    
-    return response.completion
+    try:
+        response = client.completion(
+            model="claude-2.0",
+            prompt=prompt,
+            max_tokens_to_sample=300,
+            temperature=0.7
+        )
+        return response.completion
+    except Exception as e:
+        st.error(f"AI 추천을 가져오는데 실패했습니다: {str(e)}")
+        return None
 
-# 메인 코드 부분에서 dust_info 사용 전 확인
 if st.button('미세먼지 정보 확인 및 옷차림 추천받기'):
     if not claude_api_key:
         st.error('Claude API 키를 입력해주세요.')
@@ -82,25 +112,25 @@ if st.button('미세먼지 정보 확인 및 옷차림 추천받기'):
         
         if dust_info:
             st.subheader('미세먼지 예보')
-            st.write(f"예보 일시: {dust_info.get('dataTime', '정보 없음')}")
-            st.write(f"예보 지역: {dust_info.get('informGrade', '정보 없음')}")
-            
-            # 임의의 날씨 데이터 (실제 앱에서는 날씨 API를 통해 가져와야 함)
-            pm10_value = 75  # 예시 값
-            temperature = 22  # 예시 값
-            humidity = 60  # 예시 값
-            
-            st.subheader('날씨 정보')
-            st.write(f"미세먼지(PM10): {pm10_value}μg/m³")
-            st.write(f"기온: {temperature}°C")
-            st.write(f"습도: {humidity}%")
-            
-            st.subheader('AI 옷차림 추천')
-            try:
+            for item in dust_info:
+                st.write(f"예보 일시: {item.get('dataTime', '정보 없음')}")
+                st.write(f"예보 지역: {item.get('informGrade', '정보 없음')}")
+                st.write(f"예보 개황: {item.get('informOverall', '정보 없음')}")
+                
+                # 실제 PM10 값 추출 (예시)
+                pm10_value = item.get('pm10Value', '75')  # 기본값 75
+                temperature = 22  # 예시 값 (실제로는 날씨 API에서 가져와야 함)
+                humidity = 60  # 예시 값 (실제로는 날씨 API에서 가져와야 함)
+                
+                st.subheader('날씨 정보')
+                st.write(f"미세먼지(PM10): {pm10_value}μg/m³")
+                st.write(f"기온: {temperature}°C")
+                st.write(f"습도: {humidity}%")
+                
+                st.subheader('AI 옷차림 추천')
                 recommendation = get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidity)
-                st.write(recommendation)
-            except Exception as e:
-                st.error(f'AI 추천을 가져오는데 실패했습니다: {str(e)}')
+                if recommendation:
+                    st.write(recommendation)
         else:
             st.error('미세먼지 정보를 가져오는데 실패했습니다. 다시 시도해주세요.')
 
