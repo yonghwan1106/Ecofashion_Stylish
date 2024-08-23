@@ -1,8 +1,7 @@
 import streamlit as st
 import requests
-import pandas as pd
 import xmltodict
-from datetime import datetime, timedelta
+from datetime import datetime
 import anthropic
 
 # 제목 및 설명
