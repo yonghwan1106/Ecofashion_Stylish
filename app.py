@@ -35,7 +35,7 @@ def get_dust_forecast(search_date):
 
     try:
         response = requests.get(url, params=params)
-        response.raise_for_status()  # Raises a HTTPError if the status is 4xx, 5xx
+        response.raise_for_status()
         
         # 응답 내용 로깅
         logging.debug(f"Raw API Response: {response.content}")
@@ -53,8 +53,10 @@ def get_dust_forecast(search_date):
         result_code = header.get('resultCode')
         result_msg = header.get('resultMsg')
 
+        logging.debug(f"Result Code: {result_code}, Result Message: {result_msg}")
+
         if result_code != '00':
-            st.error(f"API 오류: {result_msg}")
+            st.error(f"API 오류 (코드: {result_code}): {result_msg}")
             return None
 
         items = body.get('items', {}).get('item', [])
@@ -68,6 +70,7 @@ def get_dust_forecast(search_date):
         return items
     except requests.RequestException as e:
         st.error(f"API 요청 중 오류가 발생했습니다: {e}")
+        logging.exception("API request error")
         return None
     except Exception as e:
         st.error(f"예상치 못한 오류가 발생했습니다: {e}")
