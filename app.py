@@ -31,8 +31,20 @@ def get_dust_forecast(search_date):
     response = requests.get(url, params=params)
     dict_data = xmltodict.parse(response.content)
     
-    items = dict_data['response']['body']['items']['item']
-    return items[0] if isinstance(items, list) else items
+    # API 응답 구조 확인 및 안전한 데이터 접근
+    if 'response' in dict_data:
+        response_data = dict_data['response']
+        if 'body' in response_data:
+            body_data = response_data['body']
+            if 'items' in body_data:
+                items_data = body_data['items']
+                if 'item' in items_data:
+                    items = items_data['item']
+                    return items[0] if isinstance(items, list) else items
+    
+    # 데이터를 찾지 못한 경우
+    st.error("미세먼지 데이터를 가져오는데 실패했습니다. API 응답 구조를 확인해주세요.")
+    return None
 
 def get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidity):
     client = anthropic.Client(api_key=claude_api_key)
@@ -61,6 +73,7 @@ def get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidit
     
     return response.completion
 
+# 메인 코드 부분에서 dust_info 사용 전 확인
 if st.button('미세먼지 정보 확인 및 옷차림 추천받기'):
     if not claude_api_key:
         st.error('Claude API 키를 입력해주세요.')
@@ -69,7 +82,7 @@ if st.button('미세먼지 정보 확인 및 옷차림 추천받기'):
         
         if dust_info:
             st.subheader('미세먼지 예보')
-            st.write(f"예보 일시: {dust_info['dataTime']}")
+            st.write(f"예보 일시: {dust_info.get('dataTime', '정보 없음')}")
             st.write(f"예보 지역: {dust_info.get('informGrade', '정보 없음')}")
             
             # 임의의 날씨 데이터 (실제 앱에서는 날씨 API를 통해 가져와야 함)
