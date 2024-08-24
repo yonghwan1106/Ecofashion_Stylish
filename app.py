@@ -5,6 +5,7 @@ from datetime import datetime
 from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
 import logging
 from urllib.parse import unquote
+import pandas as pd
 
 # 로깅 설정
 logging.basicConfig(level=logging.DEBUG)
@@ -114,6 +115,38 @@ def get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidit
         st.error(f"AI 추천을 가져오는데 실패했습니다: {str(e)}")
         return None
 
+# 새로운 기능: 스마트 옷장 분석
+def analyze_wardrobe(items):
+    analysis = []
+    for item in items:
+        analysis.append({
+            'name': item,
+            'material': 'Cotton',  # 예시, 실제로는 AI가 분석해야 함
+            'style': 'Casual',  # 예시, 실제로는 AI가 분석해야 함
+            'dust_protection': 3  # 예시, 1-5 스케일
+        })
+    return pd.DataFrame(analysis)
+
+# 새로운 기능: 쇼핑 가이드
+def shopping_guide(dust_level):
+    if dust_level > 80:
+        return "미세먼지 차단 마스크, 공기정화 기능이 있는 재킷을 추천합니다."
+    elif dust_level > 50:
+        return "경량 방진 재킷, 안티폴루션 스프레이를 추천합니다."
+    else:
+        return "일반적인 의류로 충분합니다. 필요시 가벼운 마스크를 착용하세요."
+
+# 새로운 기능: 세탁 및 관리 조언
+def cleaning_advice(dust_exposure):
+    if dust_exposure > 80:
+        return "오늘 착용한 옷은 즉시 세탁하고, 실외에서 말리지 마세요."
+    elif dust_exposure > 50:
+        return "오늘 착용한 옷은 가볍게 털어내고, 다음 착용 전 세탁을 권장합니다."
+    else:
+        return "일반적인 세탁 주기를 유지하세요."
+
+
+# 메인 앱 로직
 if st.button('미세먼지 정보 확인 및 옷차림 추천받기'):
     if not claude_api_key:
         st.error('Claude API 키를 입력해주세요.')
@@ -126,7 +159,7 @@ if st.button('미세먼지 정보 확인 및 옷차림 추천받기'):
             st.write(f"예보 지역: {dust_info.get('informGrade', '정보 없음')}")
             st.write(f"예보 개황: {dust_info.get('informOverall', '정보 없음')}")
             
-            pm10_value = dust_info.get('pm10Value')  # 기본값 설정
+            pm10_value = int(dust_info.get('pm10Value', 0))
             temperature = 22  # 예시 값 (실제로는 날씨 API에서 가져와야 함)
             humidity = 60  # 예시 값 (실제로는 날씨 API에서 가져와야 함)
             
@@ -139,6 +172,29 @@ if st.button('미세먼지 정보 확인 및 옷차림 추천받기'):
             recommendation = get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidity)
             if recommendation:
                 st.write(recommendation)
+            
+            # 스마트 옷장 분석
+            st.subheader('스마트 옷장 분석')
+            wardrobe_items = ['T-shirt', 'Jeans', 'Jacket', 'Dress']  # 예시 아이템
+            wardrobe_analysis = analyze_wardrobe(wardrobe_items)
+            st.dataframe(wardrobe_analysis)
+            
+            # 쇼핑 가이드
+            st.subheader('쇼핑 가이드')
+            shopping_advice = shopping_guide(pm10_value)
+            st.write(shopping_advice)
+            
+            # 세탁 및 관리 조언
+            st.subheader('세탁 및 관리 조언')
+            cleaning_advice = cleaning_advice(pm10_value)
+            st.write(cleaning_advice)
+            
+            # 스타일 커뮤니티 (간단한 구현)
+            st.subheader('스타일 커뮤니티')
+            user_style = st.text_input("오늘의 스타일을 공유해주세요!")
+            if user_style:
+                st.success(f"스타일이 공유되었습니다: {user_style}")
+                # 실제 구현에서는 데이터베이스에 저장하고 다른 사용자의 평가를 받을 수 있게 해야 합니다.
         else:
             st.error('미세먼지 정보를 가져오는데 실패했습니다. 다시 시도해주세요.')
 
@@ -151,7 +207,4 @@ st.sidebar.write('선글라스')
 
 # 푸터
 st.sidebar.markdown('---')
-st.sidebar.write('© 2023 에코패션 스타일리스트')
-
-# 데이터 출처 표시
-st.markdown("데이터 출처: 환경부/한국환경공단")
+st.sidebar.write('© 2024 에코패션 스타일리스트')
