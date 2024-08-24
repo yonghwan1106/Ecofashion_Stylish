@@ -17,7 +17,7 @@ selected_date = st.date_input(
 # API 정보
 url = 'http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMinuDustFrcstDspth'
 encoded_key = 'S1kBo55wOyrX9FdzDMbXL4blXSOj%2BmYuvk2s%2B%2Bw5iTb%2Ba7Uu3NWwqPjz6wv7H0JVRaHn4zM3AAJIHy8rTAiHLw%3D%3D'
-decoded_key = unquote(encoded_key)  # URL 디코딩
+decoded_key = 'S1kBo55wOyrX9FdzDMbXL4blXSOj+mYuvk2s++w5iTb+a7Uu3NWwqPjz6wv7H0JVRaHn4zM3AAJIHy8rTAiHLw=='  # URL 디코딩
 
 params = {
     'serviceKey': decoded_key,  # 디코딩된 서비스 키 사용
