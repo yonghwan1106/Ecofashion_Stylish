@@ -6,7 +6,7 @@ from urllib.parse import unquote
 
 def fetch_air_pollution_data(selected_date, debug_mode=False):
     url = 'http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMinuDustFrcstDspth'
-    url = 'http://apis.data.go.kr/B552584/ArpltnStatsSvc/getCtprvnMesureLIst'
+    url = 'http://apis.data.go.kr/B552584/ArpltnStatsSvc/getCtprvnMesureLIst?itemCode=PM10&dataGubun=HOUR&pageNo=1&numOfRows=100&returnType=xml&serviceKey=서비스키'
     encoded_key = 'S1kBo55wOyrX9FdzDMbXL4blXSOj%2BmYuvk2s%2B%2Bw5iTb%2Ba7Uu3NWwqPjz6wv7H0JVRaHn4zM3AAJIHy8rTAiHLw%3D%3D'
     decoded_key = unquote(encoded_key)  # URL 디코딩
     params = {
@@ -16,8 +16,6 @@ def fetch_air_pollution_data(selected_date, debug_mode=False):
         'pageNo': '1',
         'searchDate': selected_date.strftime("%Y-%m-%d"),
         'InformCode': 'PM10'
-        'itemcode':'pm10'
-        'dataGubun':'HOUR''
     }
     try:
         response = requests.get(url, params=params)
