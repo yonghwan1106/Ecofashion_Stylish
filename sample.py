@@ -61,7 +61,7 @@ def main():
 
     selected_date = st.date_input(
         "조회할 날짜를 선택하세요",
-        min_value=datetime.now().date() - timedelta(days=30),
+        min_value=datetime.now().date() - timedelta(days=300),
         max_value=datetime.now().date(),
         value=datetime.now().date(),
     )
