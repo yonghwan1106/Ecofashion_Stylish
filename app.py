@@ -126,7 +126,7 @@ if st.button('미세먼지 정보 확인 및 옷차림 추천받기'):
             st.write(f"예보 지역: {dust_info.get('informGrade', '정보 없음')}")
             st.write(f"예보 개황: {dust_info.get('informOverall', '정보 없음')}")
             
-            pm10_value = dust_info.get('pm10Value', '75')  # 기본값 설정
+            pm10_value = dust_info.get('pm10Value')  # 기본값 설정
             temperature = 22  # 예시 값 (실제로는 날씨 API에서 가져와야 함)
             humidity = 60  # 예시 값 (실제로는 날씨 API에서 가져와야 함)
             
