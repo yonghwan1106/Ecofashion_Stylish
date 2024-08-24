@@ -67,11 +67,12 @@ def get_dust_forecast(search_date):
         if isinstance(items, dict):
             items = [items]
         
-        if not items:
+        if items:
+            return items[0]  # 첫 번째 항목만 반환
+        else:
             st.warning("해당 날짜의 미세먼지 정보가 없습니다.")
             return None
-        
-        return items
+
     except requests.RequestException as e:
         st.error(f"API 요청 중 오류가 발생했습니다: {e}")
         logging.exception("API request error")
@@ -119,27 +120,23 @@ if st.button('미세먼지 정보 확인 및 옷차림 추천받기'):
         
         if dust_info:
             st.subheader('미세먼지 예보')
-            for item in dust_info:
-                st.write(f"예보 일시: {item.get('dataTime', '정보 없음')}")
-                st.write(f"예보 지역: {item.get('informGrade', '정보 없음')}")
-                st.write(f"예보 개황: {item.get('informOverall', '정보 없음')}")
-                
-                # 실제 PM10 값 추출 (예시)
-                pm10_value = item.get('pm10Value', '정보 없음')
-                if pm10_value == '정보 없음':
-                    pm10_value = '75'  # 기본값 설정
-                temperature = 22  # 예시 값 (실제로는 날씨 API에서 가져와야 함)
-                humidity = 60  # 예시 값 (실제로는 날씨 API에서 가져와야 함)
-                
-                st.subheader('날씨 정보')
-                st.write(f"미세먼지(PM10): {pm10_value}μg/m³")
-                st.write(f"기온: {temperature}°C")
-                st.write(f"습도: {humidity}%")
-                
-                st.subheader('AI 옷차림 추천')
-                recommendation = get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidity)
-                if recommendation:
-                    st.write(recommendation)
+            st.write(f"예보 일시: {dust_info.get('dataTime', '정보 없음')}")
+            st.write(f"예보 지역: {dust_info.get('informGrade', '정보 없음')}")
+            st.write(f"예보 개황: {dust_info.get('informOverall', '정보 없음')}")
+            
+            pm10_value = dust_info.get('pm10Value', '75')  # 기본값 설정
+            temperature = 22  # 예시 값 (실제로는 날씨 API에서 가져와야 함)
+            humidity = 60  # 예시 값 (실제로는 날씨 API에서 가져와야 함)
+            
+            st.subheader('날씨 정보')
+            st.write(f"미세먼지(PM10): {pm10_value}μg/m³")
+            st.write(f"기온: {temperature}°C")
+            st.write(f"습도: {humidity}%")
+            
+            st.subheader('AI 옷차림 추천')
+            recommendation = get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidity)
+            if recommendation:
+                st.write(recommendation)
         else:
             st.error('미세먼지 정보를 가져오는데 실패했습니다. 다시 시도해주세요.')
 
