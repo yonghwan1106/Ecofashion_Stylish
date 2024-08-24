@@ -84,7 +84,7 @@ def get_dust_forecast(search_date):
 def get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidity):
     anthropic = Anthropic(api_key=claude_api_key)
     
-    prompt = f"{HUMAN_PROMPT} 현재 날씨 조건:
+    prompt = f"""{HUMAN_PROMPT} 현재 날씨 조건:
     - 미세먼지(PM10): {pm10_value}μg/m³
     - 기온: {temperature}°C
     - 습도: {humidity}%
@@ -97,7 +97,7 @@ def get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidit
     4. 액세서리 (마스크, 모자, 선글라스 등)
     5. 특별한 주의사항
 
-    추천 이유도 간단히 설명해주세요.{AI_PROMPT}"
+    추천 이유도 간단히 설명해주세요.{AI_PROMPT}"""
 
     try:
         completion = anthropic.completions.create(
