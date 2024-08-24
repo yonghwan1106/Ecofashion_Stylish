@@ -68,7 +68,9 @@ def get_dust_forecast(search_date):
             items = [items]
         
         if items:
-            return items[0]  # 첫 번째 항목만 반환
+            # 가장 최근의 예보 정보만 반환
+            latest_forecast = max(items, key=lambda x: x.get('dataTime', ''))
+            return latest_forecast
         else:
             st.warning("해당 날짜의 미세먼지 정보가 없습니다.")
             return None
