@@ -219,51 +219,70 @@ def main():
             "오늘 입을 수 있는 옷을 선택하세요",
             ["티셔츠", "셔츠", "청바지", "슬랙스", "재킷", "코트", "운동화", "구두"]
         )
-
+    # 챗봇 추가
     add_chatbot_to_sidebar()
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button('미세먼지 정보 확인 및 옷차림 추천받기'):
+        # 미세먼지 정보 확인 버튼
+        if st.button('미세먼지 정보 확인'):
+            with st.spinner('미세먼지 정보를 가져오는 중...'):
+                dust_info = get_dust_forecast(search_date)
+                weather_data = get_weather_data(search_date)
+
+                if dust_info and weather_data:
+                    st.markdown("<h2 class='sub-header'>미세먼지 예보</h2>", unsafe_allow_html=True)
+                    st.info(f"예보 일시: {dust_info.get('dataTime', '정보 없음')}")
+                    st.info(f"예보 지역: {dust_info.get('informGrade', '정보 없음')}")
+                    st.info(f"예보 개황: {dust_info.get('informOverall', '정보 없음')}")
+
+                    pm10_value = int(dust_info.get('pm10Value', 0))
+                    temperature = weather_data["temperature"]
+                    humidity = weather_data["humidity"]
+
+                    st.markdown("<h2 class='sub-header'>날씨 정보</h2>", unsafe_allow_html=True)
+                    col_weather1, col_weather2, col_weather3 = st.columns(3)
+                    col_weather1.metric("미세먼지(PM10)", f"{pm10_value}μg/m³")
+                    col_weather2.metric("기온", f"{temperature}°C")
+                    col_weather3.metric("습도", f"{humidity}%")
+
+                    # 세션 상태에 정보 저장
+                    st.session_state.weather_info = {
+                        "pm10_value": pm10_value,
+                        "temperature": temperature,
+                        "humidity": humidity
+                    }
+                else:
+                    st.error('미세먼지 정보를 가져오는데 실패했습니다. 다시 시도해주세요.')
+
+        # 옷차림 추천받기 버튼
+        if st.button('옷차림 추천받기'):
             if not claude_api_key:
                 st.error('Claude API 키를 입력해주세요.')
+            elif not hasattr(st.session_state, 'weather_info'):
+                st.error('먼저 미세먼지 정보를 확인해주세요.')
             else:
-                with st.spinner('정보를 가져오는 중...'):
-                    # 날씨/환경 정보 데이터 호출
-                    dust_info = get_dust_forecast(search_date)
-                    weather_data = get_weather_data(search_date)
-
-                    if dust_info and weather_data:
-                        st.markdown("<h2 class='sub-header'>미세먼지 예보</h2>", unsafe_allow_html=True)
-                        st.info(f"예보 일시: {dust_info.get('dataTime', '정보 없음')}")
-                        st.info(f"예보 지역: {dust_info.get('informGrade', '정보 없음')}")
-                        st.info(f"예보 개황: {dust_info.get('informOverall', '정보 없음')}")
-
-                        pm10_value = int(dust_info.get('pm10Value', 0))
-                        temperature = weather_data["temperature"]
-                        humidity = weather_data["humidity"]
-
-                        st.markdown("<h2 class='sub-header'>날씨 정보</h2>", unsafe_allow_html=True)
-                        col_weather1, col_weather2, col_weather3 = st.columns(3)
-                        col_weather1.metric("미세먼지(PM10)", f"{pm10_value}μg/m³")
-                        col_weather2.metric("기온", f"{temperature}°C")
-                        col_weather3.metric("습도", f"{humidity}%")
-
-                        # Claude API 호출
+                with st.spinner('AI가 옷차림을 추천하는 중...'):
+                    weather_info = st.session_state.weather_info
+                    recommendation = get_clothing_recommendation(
+                        claude_api_key, 
+                        weather_info["pm10_value"], 
+                        weather_info["temperature"], 
+                        weather_info["humidity"]
+                    )
+                    if recommendation:
                         st.markdown("<h2 class='sub-header'>AI 옷차림 추천</h2>", unsafe_allow_html=True)
-                        recommendation = get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidity)
-                        if recommendation:
-                            st.markdown(f"<p class='recommendation-text'>{recommendation}</p>", unsafe_allow_html=True)
+                        st.markdown(f"<p class='recommendation-text'>{recommendation}</p>", unsafe_allow_html=True)
 
                         # 쇼핑 가이드 및 세탁 조언
                         st.markdown("<h2 class='sub-header'>쇼핑 가이드</h2>", unsafe_allow_html=True)
-                        st.write(shopping_guide(pm10_value))
+                        st.write(shopping_guide(weather_info["pm10_value"]))
 
                         st.markdown("<h2 class='sub-header'>세탁 및 관리 조언</h2>", unsafe_allow_html=True)
-                        st.write(cleaning_advice(pm10_value))
+                        st.write(cleaning_advice(weather_info["pm10_value"]))
                     else:
-                        st.error('정보를 가져오는데 실패했습니다. 다시 시도해주세요.')
+                        st.error('옷차림 추천을 생성하는데 실패했습니다. 다시 시도해주세요.')
 
     with col2:
         # 스마트 옷장 분석
