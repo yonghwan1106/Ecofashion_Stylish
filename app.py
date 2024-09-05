@@ -213,6 +213,7 @@ def main():
     # 사이드바 설정
     with st.sidebar:
         claude_api_key = st.text_input("Claude API 키를 입력하세요", type="password")
+        st.session_state.claude_api_key = claude_api_key  # API 키를 세션 상태에 저장
         search_date = st.date_input("날짜 선택", datetime.now())
         wardrobe_items = st.multiselect(
             "오늘 입을 수 있는 옷을 선택하세요",
