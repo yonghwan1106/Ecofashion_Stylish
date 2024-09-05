@@ -156,6 +156,54 @@ def get_weather_data(search_date):
         "humidity": 60
     }
 
+
+# 챗봇
+def initialize_chat_history():
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+def display_chat_messages():
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+def get_chatbot_response(claude_api_key, user_input):
+    anthropic = Anthropic(api_key=claude_api_key)
+    
+    messages = [
+        {"role": "human", "content": "당신은 에코패션 스타일리스트 AI 어시스턴트입니다. 사용자의 패션과 환경에 대한 질문에 답변해주세요."},
+        {"role": "assistant", "content": "네, 저는 에코패션 스타일리스트 AI 어시스턴트입니다. 환경을 고려한 패션에 대해 조언해드릴 수 있습니다. 어떤 도움이 필요하신가요?"},
+    ] + st.session_state.messages + [
+        {"role": "human", "content": user_input}
+    ]
+
+    response = anthropic.completions.create(
+        model="claude-2.0",
+        prompt=f"{HUMAN_PROMPT} {user_input}{AI_PROMPT}",
+        max_tokens_to_sample=300,
+        temperature=0.7
+    )
+
+    return response.completion
+
+def add_chatbot_to_sidebar():
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("<h2 class='sidebar-header'>챗봇 어시스턴트</h2>", unsafe_allow_html=True)
+    
+    initialize_chat_history()
+    display_chat_messages()
+
+    if user_input := st.sidebar.chat_input("무엇을 도와드릴까요?"):
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        with st.sidebar.chat_message("user"):
+            st.markdown(user_input)
+
+        with st.sidebar.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = get_chatbot_response(st.session_state.claude_api_key, user_input)
+            message_placeholder.markdown(full_response)
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+
 # 메인 앱 로직
 
 def main():
@@ -170,6 +218,8 @@ def main():
             "오늘 입을 수 있는 옷을 선택하세요",
             ["티셔츠", "셔츠", "청바지", "슬랙스", "재킷", "코트", "운동화", "구두"]
         )
+        
+    add_chatbot_to_sidebar()
 
     col1, col2 = st.columns(2)
 
