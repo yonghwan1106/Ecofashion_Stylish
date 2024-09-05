@@ -1,314 +1,222 @@
+import os
 import streamlit as st
-import requests
-import xmltodict
-from datetime import datetime
-from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
-import logging
-from urllib.parse import unquote
-import pandas as pd
-import plotly.express as px
+
+
+# Streamlit Secrets에서 환경 변수로 API 키 설정
+os.environ['ANTHROPIC_API_KEY'] = st.secrets["ANTHROPIC_API_KEY"]
 
 # 페이지 설정
-st.set_page_config(page_title="에코패션 스타일리스트", page_icon="👔", layout="wide")
+st.set_page_config(page_title="개인 탄소 발자국 거래 시스템", layout="wide")
 
-# CSS 스타일 추가
-st.markdown("""
-<style>
-    .main-header {font-size:40px; font-weight:bold; color:#1E88E5;}
-    .sub-header {font-size:30px; font-weight:bold; color:#4CAF50;}
-    .info-text {font-size:18px; color:#333333;}
-    .sidebar-header {font-size:24px; font-weight:bold; color:#FF5722;}
-    .recommendation-text {font-size:20px; color:#673AB7; background-color:#E8EAF6; padding:10px; border-radius:5px;}
-    .footer {font-size:14px; color:#757575; text-align:center;}
-</style>
-""", unsafe_allow_html=True)
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import logging
+from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
 
-# 로깅 설정
-logging.basicConfig(level=logging.DEBUG)
+from config import ANTHROPIC_API_KEY, INITIAL_CARBON_CREDITS, AI_MODEL, MAX_TOKENS
+from datetime import datetime, timedelta
+from ai_integration import get_ai_recommendation, analyze_carbon_trend
+from visualizations import (create_carbon_footprint_gauge, create_carbon_trend_chart,
+                            create_category_breakdown, create_reduction_potential_chart)
 
 
-# 공공 데이터 API 키
-encoded_key = 'S1kBo55wOyrX9FdzDMbXL4blXSOj%2BmYuvk2s%2B%2Bw5iTb%2Ba7Uu3NWwqPjz6wv7H0JVRaHn4zM3AAJIHy8rTAiHLw%3D%3D'
-PUBLIC_API_KEY = unquote(encoded_key)  # URL 디코딩
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def get_dust_forecast(search_date):
-    url = 'http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMinuDustFrcstDspth'
-    params = {
-        'serviceKey': PUBLIC_API_KEY,
-        'returnType': 'xml',
-        'numOfRows': '100',
-        'pageNo': '1',
-        'searchDate': search_date.strftime('%Y-%m-%d'),
-        'InformCode': 'PM10'
-    }
+# Anthropic API 키 확인
+if not ANTHROPIC_API_KEY:
+    st.error("ANTHROPIC_API_KEY가 설정되지 않았습니다. config.py 파일을 확인해주세요.")
+    st.stop()
 
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()  # Raises a HTTPError if the status is 4xx, 5xx
-        
-        # 응답 내용 로깅
-        logging.debug(f"API URL: {response.url}")
-        logging.debug(f"Raw API Response: {response.content}")
-        
-        dict_data = xmltodict.parse(response.content)
-        
-        # 파싱된 데이터 로깅
-        logging.debug(f"Parsed API Response: {dict_data}")
+# Anthropic 클라이언트 초기화
+anthropic = Anthropic(api_key=ANTHROPIC_API_KEY)
 
-        # API 응답 구조 확인 및 안전한 데이터 접근
-        response_data = dict_data.get('response', {})
-        header = response_data.get('header', {})
-        body = response_data.get('body', {})
+# 초기 탄소 크레딧 설정
+if 'carbon_credits' not in st.session_state:
+    st.session_state.carbon_credits = INITIAL_CARBON_CREDITS
 
-        result_code = header.get('resultCode')
-        result_msg = header.get('resultMsg')
-
-        if result_code != '00':
-            st.error(f"API 오류 (코드: {result_code}): {result_msg}")
-            return None
-
-        items = body.get('items', {}).get('item', [])
-        if isinstance(items, dict):
-            items = [items]
-        
-        if items:
-            # 가장 최근의 예보 정보만 반환
-            latest_forecast = max(items, key=lambda x: x.get('dataTime', ''))
-            return latest_forecast
-        else:
-            st.warning("해당 날짜의 미세먼지 정보가 없습니다.")
-            return None
-
-    except requests.RequestException as e:
-        st.error(f"API 요청 중 오류가 발생했습니다: {e}")
-        logging.exception("API request error")
-        return None
-    except Exception as e:
-        st.error(f"예상치 못한 오류가 발생했습니다: {e}")
-        logging.exception("Unexpected error occurred")
-        return None
-
-def get_clothing_recommendation(claude_api_key, pm10_value, temperature, humidity):
-    anthropic = Anthropic(api_key=claude_api_key)
-    
-    prompt = f"""{HUMAN_PROMPT} 현재 날씨 조건:
-    - 미세먼지(PM10): {pm10_value}μg/m³
-    - 기온: {temperature}°C
-    - 습도: {humidity}%
-
-    위 날씨 조건을 고려하여 적절한 옷차림을 추천해주세요. 건강과 스타일을 모두 고려해야 합니다.
-    추천 내용에는 다음이 포함되어야 합니다:
-    1. 상의
-    2. 하의
-    3. 신발
-    4. 액세서리 (마스크, 모자, 선글라스 등)
-    5. 특별한 주의사항
-
-    추천 이유도 간단히 설명해주세요.{AI_PROMPT}"""
+# AI 통합 사용 예
+def get_ai_recommendation(user_data):
+    logger.info(f"Attempting to get AI recommendation for user data: {user_data}")
+    client = Anthropic(api_key=ANTHROPIC_API_KEY)
+    prompt = f"{HUMAN_PROMPT} 다음은 사용자의 탄소 발자국 데이터입니다: {user_data}. 이 사용자에게 탄소 발자국을 줄일 수 있는 개인화된 조언을 제공해주세요. 구체적인 행동 지침과 그 효과를 설명해주세요.{AI_PROMPT}"
 
     try:
-        completion = anthropic.completions.create(
-            model="claude-2.0",
+        response = client.completions.create(
+            model=AI_MODEL,
             prompt=prompt,
-            max_tokens_to_sample=500,
+            max_tokens_to_sample=MAX_TOKENS,
             temperature=0.7
         )
-        return completion.completion
+        logger.info("Successfully received AI recommendation")
+        return response.completion
     except Exception as e:
-        st.error(f"AI 추천을 가져오는데 실패했습니다: {str(e)}")
+        logger.error(f"Error in getting AI recommendation: {str(e)}")
         return None
 
-# 스마트 옷장 분석
-def analyze_wardrobe(items):
-    analysis = []
-    for item in items:
-        analysis.append({
-            'name': item,
-            'material': '면' if item in ['티셔츠', '셔츠'] else '데님' if item == '청바지' else '합성섬유',
-            'style': '캐주얼' if item in ['티셔츠', '청바지', '운동화'] else '정장',
-            'dust_protection': 3 if item in ['재킷', '코트'] else 2
-        })
-    return pd.DataFrame(analysis)
-
-# 쇼핑 가이드
-def shopping_guide(dust_level):
-    if dust_level > 80:
-        return "🛒 미세먼지 차단 마스크, 공기정화 기능이 있는 재킷을 추천합니다."
-    elif dust_level > 50:
-        return "🛍️ 경량 방진 재킷, 안티폴루션 스프레이를 추천합니다."
-    else:
-        return "👕 일반적인 의류로 충분합니다. 필요시 가벼운 마스크를 착용하세요."
-
-# 세탁 충고
-def cleaning_advice(dust_exposure):
-    if dust_exposure > 80:
-        return "🧼 오늘 착용한 옷은 즉시 세탁하고, 실외에서 말리지 마세요."
-    elif dust_exposure > 50:
-        return "🧽 오늘 착용한 옷은 가볍게 털어내고, 다음 착용 전 세탁을 권장합니다."
-    else:
-        return "👚 일반적인 세탁 주기를 유지하세요."
-
-def get_weather_data(search_date):
-    # 여기에 실제 날씨 API를 호출하는 코드를 작성합니다.
-    # 현재는 예시 값을 반환합니다.
-    return {
-        "temperature": 22,
-        "humidity": 60
-    }
 
 
-# 챗봇
-def initialize_chat_history():
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+# 세션 상태 초기화 함수
+def initialize_session_state():
+    if 'carbon_credits' not in st.session_state:
+        st.session_state.carbon_credits = 4.0  # 초기 할당량
+    if 'virtual_trees' not in st.session_state:
+        st.session_state.virtual_trees = 0
+    if 'challenges' not in st.session_state:
+        st.session_state.challenges = []
 
-def display_chat_messages():
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-def get_chatbot_response(claude_api_key, user_input):
-    anthropic = Anthropic(api_key=claude_api_key)
-    
-    messages = [
-        {"role": "human", "content": "당신은 에코패션 스타일리스트 AI 어시스턴트입니다. 사용자의 패션과 환경에 대한 질문에 답변해주세요."},
-        {"role": "assistant", "content": "네, 저는 에코패션 스타일리스트 AI 어시스턴트입니다. 환경을 고려한 패션에 대해 조언해드릴 수 있습니다. 어떤 도움이 필요하신가요?"},
-    ] + st.session_state.messages + [
-        {"role": "human", "content": user_input}
-    ]
-
-    response = anthropic.completions.create(
-        model="claude-2.0",
-        prompt=f"{HUMAN_PROMPT} {user_input}{AI_PROMPT}",
-        max_tokens_to_sample=300,
-        temperature=0.7
-    )
-
-    return response.completion
-
-def add_chatbot_to_sidebar():
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("<h2 class='sidebar-header'>챗봇 어시스턴트</h2>", unsafe_allow_html=True)
-    
-    initialize_chat_history()
-    display_chat_messages()
-
-    if user_input := st.sidebar.chat_input("무엇을 도와드릴까요?"):
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.sidebar.chat_message("user"):
-            st.markdown(user_input)
-
-        with st.sidebar.chat_message("assistant"):
-            message_placeholder = st.empty()
-            full_response = get_chatbot_response(st.session_state.claude_api_key, user_input)
-            message_placeholder.markdown(full_response)
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
-
-# 메인 앱 로직
+# 실시간 탄소 발자국 시뮬레이션 함수
+@st.cache_data
+def simulate_real_time_footprint():
+    now = datetime.now()
+    times = [now - timedelta(minutes=i) for i in range(60, 0, -1)]
+    footprints = np.cumsum(np.random.normal(0.001, 0.0005, 60))
+    return pd.DataFrame({'time': times, 'footprint': footprints})
 
 def main():
-    st.markdown("<h1 class='main-header'>🌿 에코패션 스타일리스트 🌿</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='info-text'>미세먼지 정보를 바탕으로 AI가 옷차림을 추천해드립니다.</p>", unsafe_allow_html=True)
+    initialize_session_state()
 
-    # 사이드바 설정
-    with st.sidebar:
-        claude_api_key = st.text_input("Claude API 키를 입력하세요", type="password")
-        st.session_state.claude_api_key = claude_api_key  # API 키를 세션 상태에 저장
-        search_date = st.date_input("날짜 선택", datetime.now())
-        wardrobe_items = st.multiselect(
-            "오늘 입을 수 있는 옷을 선택하세요",
-            ["티셔츠", "셔츠", "청바지", "슬랙스", "재킷", "코트", "운동화", "구두"]
-        )
-    # 챗봇 추가
-    add_chatbot_to_sidebar()
+    # 사이드바 - 네비게이션
+    page = st.sidebar.selectbox("페이지 선택", ["홈", "탄소 크레딧 관리", "마켓플레이스", "프로필"])
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # 미세먼지 정보 확인 버튼
-        if st.button('미세먼지 정보 확인'):
-            with st.spinner('미세먼지 정보를 가져오는 중...'):
-                dust_info = get_dust_forecast(search_date)
-                weather_data = get_weather_data(search_date)
-
-                if dust_info and weather_data:
-                    st.markdown("<h2 class='sub-header'>미세먼지 예보</h2>", unsafe_allow_html=True)
-                    st.info(f"예보 일시: {dust_info.get('dataTime', '정보 없음')}")
-                    st.info(f"예보 지역: {dust_info.get('informGrade', '정보 없음')}")
-                    st.info(f"예보 개황: {dust_info.get('informOverall', '정보 없음')}")
-
-                    pm10_value = int(dust_info.get('pm10Value', 0))
-                    temperature = weather_data["temperature"]
-                    humidity = weather_data["humidity"]
-
-                    st.markdown("<h2 class='sub-header'>날씨 정보</h2>", unsafe_allow_html=True)
-                    col_weather1, col_weather2, col_weather3 = st.columns(3)
-                    col_weather1.metric("미세먼지(PM10)", f"{pm10_value}μg/m³")
-                    col_weather2.metric("기온", f"{temperature}°C")
-                    col_weather3.metric("습도", f"{humidity}%")
-
-                    # 세션 상태에 정보 저장
-                    st.session_state.weather_info = {
-                        "pm10_value": pm10_value,
-                        "temperature": temperature,
-                        "humidity": humidity
-                    }
-                else:
-                    st.error('미세먼지 정보를 가져오는데 실패했습니다. 다시 시도해주세요.')
-
-        # 옷차림 추천받기 버튼
-        if st.button('옷차림 추천받기'):
-            if not claude_api_key:
-                st.error('Claude API 키를 입력해주세요.')
-            elif not hasattr(st.session_state, 'weather_info'):
-                st.error('먼저 미세먼지 정보를 확인해주세요.')
+    if page == "홈":
+        st.title("내 탄소 발자국")
+        
+        # 현재 탄소 발자국 상태
+        current_footprint = st.session_state.carbon_credits
+        st.metric(label="현재 탄소 크레딧", value=f"{current_footprint:.2f} 톤", delta=f"{4.0 - current_footprint:.2f} 톤")
+        
+        # 새로운 기능: 탄소 발자국 게이지
+        create_carbon_footprint_gauge(current_footprint)
+        
+        # 탄소 발자국 그래프
+        trend_data = {'date': pd.date_range(start="2024-01-01", end="2024-12-31", freq="M"),
+                      'footprint': np.cumsum(np.random.normal(0.1, 0.02, 12))}
+        create_carbon_trend_chart(trend_data)
+        
+        # 가상 나무
+        st.subheader(f"당신의 가상 숲: {st.session_state.virtual_trees} 그루")
+        if st.button("나무 심기"):
+            if st.session_state.carbon_credits >= 0.1:
+                st.session_state.carbon_credits -= 0.1
+                st.session_state.virtual_trees += 1
+                st.success("가상 나무를 1그루 심었습니다!")
             else:
-                with st.spinner('AI가 옷차림을 추천하는 중...'):
-                    weather_info = st.session_state.weather_info
-                    recommendation = get_clothing_recommendation(
-                        claude_api_key, 
-                        weather_info["pm10_value"], 
-                        weather_info["temperature"], 
-                        weather_info["humidity"]
-                    )
-                    if recommendation:
-                        st.markdown("<h2 class='sub-header'>AI 옷차림 추천</h2>", unsafe_allow_html=True)
-                        st.markdown(f"<p class='recommendation-text'>{recommendation}</p>", unsafe_allow_html=True)
+                st.error("탄소 크레딧이 부족합니다.")
+        
+        # AI 추천 받기
+        if st.button("AI 추천 받기"):
+            user_data = {"transport": "car", "energy_usage": "high", "diet": "meat-heavy"}
+            try:
+                recommendation = get_ai_recommendation(user_data)
+                if recommendation:
+                    st.write(recommendation)
+                else:
+                    st.error("AI 추천을 가져오지 못했습니다. 반환된 값이 없습니다.")
+            except Exception as e:
+                st.error(f"AI 추천 과정에서 오류가 발생했습니다: {str(e)}")
+                logger.exception("AI 추천 과정에서 상세 오류 발생")
+     
+        # 카테고리별 분석
+        category_data = pd.DataFrame([
+            {'category': '교통', 'subcategory': '자동차', 'value': 2.5},
+            {'category': '교통', 'subcategory': '대중교통', 'value': 0.8},
+            {'category': '에너지', 'subcategory': '전기', 'value': 1.5},
+            {'category': '에너지', 'subcategory': '가스', 'value': 1.0},
+            {'category': '식습관', 'subcategory': '육류', 'value': 1.2},
+            {'category': '식습관', 'subcategory': '채소', 'value': 0.3},
+        ])
+        create_category_breakdown(category_data)
+        
+        # 새로운 기능: 절감 잠재량 분석
+        create_reduction_potential_chart({})
+        
+        # 새로운 기능: 탄소 발자국 트렌드 분석
+        carbon_data = [2.5, 2.3, 2.7, 2.4, 2.2]  # 최근 5일간의 가상 데이터
+        if st.button("탄소 발자국 트렌드 분석"):
+            analysis = analyze_carbon_trend(carbon_data)
+            st.write(analysis)
 
-                        # 쇼핑 가이드 및 세탁 조언
-                        st.markdown("<h2 class='sub-header'>쇼핑 가이드</h2>", unsafe_allow_html=True)
-                        st.write(shopping_guide(weather_info["pm10_value"]))
+    elif page == "탄소 크레딧 관리":
+        st.title("탄소 크레딧 관리")
+        
+        st.subheader(f"현재 보유 크레딧: {st.session_state.carbon_credits:.2f} 톤")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            buy_amount = st.number_input("구매할 크레딧 양 (톤)", min_value=0.0, max_value=10.0, step=0.1)
+            if st.button("크레딧 구매"):
+                st.session_state.carbon_credits += buy_amount
+                st.success(f"{buy_amount} 톤의 크레딧을 구매했습니다.")
+        
+        with col2:
+            sell_amount = st.number_input("판매할 크레딧 양 (톤)", min_value=0.0, max_value=st.session_state.carbon_credits, step=0.1)
+            if st.button("크레딧 판매"):
+                st.session_state.carbon_credits -= sell_amount
+                st.success(f"{sell_amount} 톤의 크레딧을 판매했습니다.")
 
-                        st.markdown("<h2 class='sub-header'>세탁 및 관리 조언</h2>", unsafe_allow_html=True)
-                        st.write(cleaning_advice(weather_info["pm10_value"]))
-                    else:
-                        st.error('옷차림 추천을 생성하는데 실패했습니다. 다시 시도해주세요.')
+    elif page == "마켓플레이스":
+        st.title("탄소 크레딧 마켓플레이스")
+        
+        # 가상의 거래 데이터 생성
+        trades = pd.DataFrame({
+            'seller': ['User' + str(i) for i in range(1, 6)],
+            'amount': np.random.uniform(0.1, 2.0, 5).round(2),
+            'price': np.random.uniform(5000, 15000, 5).round(-2)
+        })
+        
+        st.table(trades)
+        
+        trade_amount = st.number_input("거래할 크레딧 양 (톤)", min_value=0.1, max_value=2.0, step=0.1)
+        trade_price = st.number_input("가격 (원/톤)", min_value=5000, max_value=15000, step=100)
+        
+        if st.button("거래 등록"):
+            st.success(f"{trade_amount} 톤의 크레딧을 {trade_price}원/톤에 등록했습니다.")
 
-    with col2:
-        # 스마트 옷장 분석
-        st.markdown("<h2 class='sub-header'>스마트 옷장 분석</h2>", unsafe_allow_html=True)
-        if wardrobe_items:
-            wardrobe_analysis = analyze_wardrobe(wardrobe_items)
-            st.dataframe(wardrobe_analysis)
+    elif page == "프로필":
+        st.title("내 프로필")
+        
+        st.subheader("개인 정보")
+        st.write("이름: 홍길동")
+        st.write(f"연간 할당량: 4.0 톤")
+        st.write(f"현재 보유 크레딧: {st.session_state.carbon_credits:.2f} 톤")
+        
+        st.subheader("통계")
+        stats_data = pd.DataFrame({
+            'category': ['교통', '에너지', '식품', '기타'],
+            'amount': np.random.uniform(0.5, 1.5, 4)
+        })
+        fig = px.pie(stats_data, values='amount', names='category', title='카테고리별 탄소 발자국')
+        st.plotly_chart(fig)
+        
+        st.subheader("챌린지")
+        new_challenge = st.text_input("새로운 챌린지 추가")
+        if st.button("챌린지 등록"):
+            st.session_state.challenges.append(new_challenge)
+            st.success("새로운 챌린지가 등록되었습니다!")
+        
+        for idx, challenge in enumerate(st.session_state.challenges):
+            st.checkbox(challenge, key=f"challenge_{idx}")
 
-            # 의류 분석 시각화
-            fig = px.bar(wardrobe_analysis, x='name', y='dust_protection', 
-                         title='의류별 미세먼지 차단 효과',
-                         labels={'name': '의류 아이템', 'dust_protection': '미세먼지 차단 효과'},
-                         color='style')
-            st.plotly_chart(fig)
-        else:
-            st.info("옷장에서 아이템을 선택해주세요.")
+    # AI 기반 예측 및 추천 (사이드바)
+    st.sidebar.subheader("AI 추천")
+    if st.sidebar.button("탄소 절감 팁 받기"):
+        tips = [
+            "대중교통을 이용하세요.",
+            "전기 절약을 위해 사용하지 않는 전자기기의 플러그를 뽑으세요.",
+            "일회용품 사용을 줄이고 재사용 가능한 제품을 사용하세요.",
+            "육류 소비를 줄이고 채식 위주의 식단을 시도해보세요.",
+            "에너지 효율이 높은 가전제품을 사용하세요."
+        ]
+        st.sidebar.info(np.random.choice(tips))
 
-        # 스타일 커뮤니티
-        st.markdown("<h2 class='sub-header'>스타일 커뮤니티</h2>", unsafe_allow_html=True)
-        user_style = st.text_input("오늘의 스타일을 공유해주세요!")
-        if user_style:
-            st.success(f"스타일이 공유되었습니다: {user_style}")
+    # 실시간 탄소 발자국 시뮬레이션 (사이드바)
+    st.sidebar.subheader("실시간 탄소 발자국")
+    real_time_data = simulate_real_time_footprint()
+    fig = px.line(real_time_data, x='time', y='footprint', title='최근 1시간 탄소 발자국')
+    st.sidebar.plotly_chart(fig, use_container_width=True)
 
-    # 푸터
-    st.markdown("---")
-    st.markdown("<p class='footer'>© 2024 에코패션 스타일리스트 | 데이터 출처: 환경부/한국환경공단</p>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
