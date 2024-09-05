@@ -218,7 +218,7 @@ def main():
             "오늘 입을 수 있는 옷을 선택하세요",
             ["티셔츠", "셔츠", "청바지", "슬랙스", "재킷", "코트", "운동화", "구두"]
         )
-        
+
     add_chatbot_to_sidebar()
 
     col1, col2 = st.columns(2)
@@ -291,4 +291,4 @@ def main():
     st.markdown("<p class='footer'>© 2024 에코패션 스타일리스트 | 데이터 출처: 환경부/한국환경공단</p>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
-main()
+    main()
