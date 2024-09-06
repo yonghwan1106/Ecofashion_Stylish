@@ -208,7 +208,6 @@ def add_chatbot_to_sidebar():
 # 메인 앱 로직
 
 def main():
-<환경 데이터 분석활용 공모전> <br> 
     st.markdown("<h1 class='main-header'>🌿 에코패션 스타일리스트 🌿</h1>", unsafe_allow_html=True)
     st.markdown("<p class='info-text'>미세먼지 정보를 바탕으로 AI가 옷차림을 추천해드립니다.</p>", unsafe_allow_html=True)
 
@@ -223,6 +222,10 @@ def main():
         )
     # 챗봇 추가
     add_chatbot_to_sidebar()
+
+
+    st.sidebar.markdown("---")
+    st.sidebar.info("© 2024 환경데이터활용분석 공모전")
 
     col1, col2 = st.columns(2)
 
