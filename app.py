@@ -31,6 +31,7 @@ logging.basicConfig(level=logging.DEBUG)
 encoded_key = 'S1kBo55wOyrX9FdzDMbXL4blXSOj%2BmYuvk2s%2B%2Bw5iTb%2Ba7Uu3NWwqPjz6wv7H0JVRaHn4zM3AAJIHy8rTAiHLw%3D%3D'
 PUBLIC_API_KEY = unquote(encoded_key)  # URL 디코딩
 
+# 
 def get_dust_forecast(search_date):
     url = 'http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMinuDustFrcstDspth'
     params = {
@@ -207,6 +208,7 @@ def add_chatbot_to_sidebar():
 # 메인 앱 로직
 
 def main():
+<환경 데이터 분석활용 공모전> <br> 
     st.markdown("<h1 class='main-header'>🌿 에코패션 스타일리스트 🌿</h1>", unsafe_allow_html=True)
     st.markdown("<p class='info-text'>미세먼지 정보를 바탕으로 AI가 옷차림을 추천해드립니다.</p>", unsafe_allow_html=True)
 
